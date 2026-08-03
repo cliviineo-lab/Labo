@@ -3,7 +3,7 @@
 
 #include <array>
 #include <atomic>
-#include "SwarmOS/Safety/SafetyCBF.hpp"
+#include "../Safety/SafetyCBF.hpp"
 
 namespace SwarmOS::Bridge {
 
