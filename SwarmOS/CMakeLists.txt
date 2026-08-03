@@ -1,19 +1,15 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 project(SwarmOS LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(MSVC)
-    add_compile_options(/W4 /WX)
-else()
-    add_compile_options(-Wall -Wextra -Werror -fno-exceptions -fno-rtti)
-endif()
-
 include_directories(include)
 
-# Executable Principal
-add_executable(swarmos_node src/main.cpp)
+enable_testing()
 
-# Suite de Tests Unitaires
-add_executable(swarmos_tests tests/test_kernel.cpp)
+add_executable(test_kernel tests/test_kernel.cpp)
+add_test(NAME test_kernel COMMAND test_kernel)
+
+add_executable(test_cbf tests/test_cbf.cpp)
+add_test(NAME test_cbf COMMAND test_cbf)
