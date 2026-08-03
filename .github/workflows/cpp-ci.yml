@@ -22,10 +22,14 @@ jobs:
       run: |
         cmake -S SwarmOS -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-11
 
-    - name: Build SwarmOS Kernel
+    - name: Build SwarmOS
       run: |
         cmake --build build --config Release
 
-    - name: Run SwarmOS Execution Pipeline
+    - name: Run Unit Tests
+      run: |
+        ./build/swarmos_tests
+
+    - name: Run Main Execution Pipeline
       run: |
         ./build/swarmos_node
