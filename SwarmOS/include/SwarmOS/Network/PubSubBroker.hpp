@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <concepts>
 #include <cstddef>
 
 namespace SwarmOS::Network {
@@ -9,7 +8,6 @@ namespace SwarmOS::Network {
 template <typename TopicType, std::size_t MaxSubscribers = 4, std::size_t QueueSize = 8>
 class PubSubBroker {
 public:
-    // Pointeur d'état générique + pointeur de fonction pour accepter tout type d'invocable (lambda avec capture compris) sans allocation
     struct Invoker {
         void* instance{nullptr};
         void (*invoke)(void*, const TopicType&){nullptr};
@@ -17,28 +15,18 @@ public:
 
     constexpr PubSubBroker() = default;
 
+    // Acepte n'importe quel callable (lambda avec/sans capture, foncteur, etc.)
     template <typename F>
-    constexpr bool subscribe_invocable(F& callable) noexcept {
+    constexpr bool subscribe(F&& callable) noexcept {
         if (m_sub_count >= MaxSubscribers) return false;
         
-        m_subscribers[m_sub_count++] = Invoker{
-            .instance = static_cast<void*>(&callable),
-            .invoke = [](void* ptr, const TopicType& val) {
-                (*static_cast<F*>(ptr))(val);
-            }
-        };
-        return true;
-    }
-
-    // Overload pratique pour pointeurs de fonctions simples
-    constexpr bool subscribe(void (*cb)(const TopicType&)) noexcept {
-        if (m_sub_count >= MaxSubscribers) return false;
+        using DecayedF = typename std::decay<F>::type;
         
+        // Stocke la référence si c'est une lvalue, ou une copie statique
         m_subscribers[m_sub_count++] = Invoker{
-            .instance = reinterpret_cast<void*>(cb),
+            .instance = const_cast<void*>(static_cast<const void*>(&callable)),
             .invoke = [](void* ptr, const TopicType& val) {
-                auto fn = reinterpret_cast<void(*)(const TopicType&)>(ptr);
-                fn(val);
+                (*static_cast<DecayedF*>(ptr))(val);
             }
         };
         return true;
