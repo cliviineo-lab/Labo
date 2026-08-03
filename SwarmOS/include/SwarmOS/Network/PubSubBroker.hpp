@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cstddef>
+#include <type_traits>
+#include <utility>
 
 namespace SwarmOS::Network {
 
@@ -15,20 +17,31 @@ public:
 
     constexpr PubSubBroker() = default;
 
-    // Acepte n'importe quel callable (lambda avec/sans capture, foncteur, etc.)
     template <typename F>
     constexpr bool subscribe(F&& callable) noexcept {
         if (m_sub_count >= MaxSubscribers) return false;
-        
+
         using DecayedF = typename std::decay<F>::type;
-        
-        // Stocke la référence si c'est une lvalue, ou une copie statique
-        m_subscribers[m_sub_count++] = Invoker{
-            .instance = const_cast<void*>(static_cast<const void*>(&callable)),
-            .invoke = [](void* ptr, const TopicType& val) {
-                (*static_cast<DecayedF*>(ptr))(val);
-            }
-        };
+
+        if constexpr (std::is_is_function_v<typename std::remove_pointer<DecayedF>::type>) {
+            // Si c'est un pointeur de fonction brut
+            m_subscribers[m_sub_count++] = Invoker{
+                .instance = reinterpret_cast<void*>(+callable),
+                .invoke = [](void* ptr, const TopicType& val) {
+                    auto fn = reinterpret_cast<void(*)(const TopicType&)>(ptr);
+                    fn(val);
+                }
+            };
+        } else {
+            // Si c'est un objet callable / lambda (avec ou sans capture)
+            m_subscribers[m_sub_count++] = Invoker{
+                .instance = const_cast<void*>(static_cast<const void*>(&callable)),
+                .invoke = [](void* ptr, const TopicType& val) {
+                    (*static_cast<DecayedF*>(ptr))(val);
+                }
+            };
+        }
+
         return true;
     }
 
