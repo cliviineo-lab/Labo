@@ -1,70 +1,64 @@
 #pragma once
 
 #include <array>
-#include <cstdint>
+#include <concepts>
 #include <cstddef>
 
 namespace SwarmOS::Network {
 
-// Structure générique pour un message du bus
-template <typename T, std::size_t Capacity = 16>
-class RingBuffer {
-public:
-    constexpr RingBuffer() noexcept = default;
-
-    constexpr bool push(const T& item) noexcept {
-        std::size_t next = (head_ + 1) % Capacity;
-        if (next == tail_) {
-            return false; // Buffer plein (garantie zéro-overflow)
-        }
-        buffer_[head_] = item;
-        head_ = next;
-        return true;
-    }
-
-    constexpr bool pop(T& item) noexcept {
-        if (head_ == tail_) {
-            return false; // Buffer vide
-        }
-        item = buffer_[tail_];
-        tail_ = (tail_ + 1) % Capacity;
-        return true;
-    }
-
-    [[nodiscard]] constexpr bool empty() const noexcept { return head_ == tail_; }
-
-private:
-    std::array<T, Capacity> buffer_{};
-    size_t head_{0};
-    size_t tail_{0};
-};
-
-// Broker de publication / abonnement statique
 template <typename TopicType, std::size_t MaxSubscribers = 4, std::size_t QueueSize = 8>
 class PubSubBroker {
 public:
-    using Callback = void(*)(const TopicType&);
+    // Pointeur d'état générique + pointeur de fonction pour accepter tout type d'invocable (lambda avec capture compris) sans allocation
+    struct Invoker {
+        void* instance{nullptr};
+        void (*invoke)(void*, const TopicType&){nullptr};
+    };
 
-    constexpr bool subscribe(Callback cb) noexcept {
-        if (subscriber_count_ >= MaxSubscribers) {
-            return false; // Limite atteinte
-        }
-        subscribers_[subscriber_count_++] = cb;
+    constexpr PubSubBroker() = default;
+
+    template <typename F>
+    constexpr bool subscribe_invocable(F& callable) noexcept {
+        if (m_sub_count >= MaxSubscribers) return false;
+        
+        m_subscribers[m_sub_count++] = Invoker{
+            .instance = static_cast<void*>(&callable),
+            .invoke = [](void* ptr, const TopicType& val) {
+                (*static_cast<F*>(ptr))(val);
+            }
+        };
         return true;
     }
 
-    void publish(const TopicType& msg) noexcept {
-        // Envoie synchrone et immédiat aux abonnés (Temps Réel)
-        for (std::size_t i = 0; i < subscriber_count_; ++i) {
-            if (subscribers_[i] != nullptr) {
-                subscribers_[i](msg);
+    // Overload pratique pour pointeurs de fonctions simples
+    constexpr bool subscribe(void (*cb)(const TopicType&)) noexcept {
+        if (m_sub_count >= MaxSubscribers) return false;
+        
+        m_subscribers[m_sub_count++] = Invoker{
+            .instance = reinterpret_cast<void*>(cb),
+            .invoke = [](void* ptr, const TopicType& val) {
+                auto fn = reinterpret_cast<void(*)(const TopicType&)>(ptr);
+                fn(val);
+            }
+        };
+        return true;
+    }
+
+    constexpr bool publish(const TopicType& message) noexcept {
+        if (m_queue_count >= QueueSize) return false;
+
+        for (std::size_t i = 0; i < m_sub_count; ++i) {
+            if (m_subscribers[i].invoke) {
+                m_subscribers[i].invoke(m_subscribers[i].instance, message);
             }
         }
+        return true;
     }
 
 private:
-    std::array<Callback, MaxSubscribers> subscribers_{};
-    std::size_t subscriber_count_{0};
+    std::array<Invoker, MaxSubscribers> m_subscribers{};
+    std::size_t m_sub_count{0};
+    std::size_t m_queue_count{0};
 };
 
 } // namespace SwarmOS::Network
