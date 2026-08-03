@@ -3,7 +3,6 @@
 #include <array>
 #include <cstddef>
 #include <type_traits>
-#include <utility>
 
 namespace SwarmOS::Network {
 
@@ -17,31 +16,33 @@ public:
 
     constexpr PubSubBroker() = default;
 
+    // 1. Surcharge pour pointeurs de fonction bruts (ex: main.cpp)
+    constexpr bool subscribe(void (*cb)(const TopicType&)) noexcept {
+        if (m_sub_count >= MaxSubscribers || !cb) return false;
+
+        m_subscribers[m_sub_count++] = Invoker{
+            .instance = reinterpret_cast<void*>(cb),
+            .invoke = [](void* ptr, const TopicType& val) {
+                auto fn = reinterpret_cast<void(*)(const TopicType&)>(ptr);
+                fn(val);
+            }
+        };
+        return true;
+    }
+
+    // 2. Surcharge pour lambdas (avec capture) et objets callable (ex: test_kernel.cpp)
     template <typename F>
     constexpr bool subscribe(F&& callable) noexcept {
         if (m_sub_count >= MaxSubscribers) return false;
 
-        using DecayedF = typename std::decay<F>::type;
+        using DecayedF = std::decay_t<F>;
 
-        if constexpr (std::is_is_function_v<typename std::remove_pointer<DecayedF>::type>) {
-            // Si c'est un pointeur de fonction brut
-            m_subscribers[m_sub_count++] = Invoker{
-                .instance = reinterpret_cast<void*>(+callable),
-                .invoke = [](void* ptr, const TopicType& val) {
-                    auto fn = reinterpret_cast<void(*)(const TopicType&)>(ptr);
-                    fn(val);
-                }
-            };
-        } else {
-            // Si c'est un objet callable / lambda (avec ou sans capture)
-            m_subscribers[m_sub_count++] = Invoker{
-                .instance = const_cast<void*>(static_cast<const void*>(&callable)),
-                .invoke = [](void* ptr, const TopicType& val) {
-                    (*static_cast<DecayedF*>(ptr))(val);
-                }
-            };
-        }
-
+        m_subscribers[m_sub_count++] = Invoker{
+            .instance = const_cast<void*>(static_cast<const void*>(&callable)),
+            .invoke = [](void* ptr, const TopicType& val) {
+                (*static_cast<DecayedF*>(ptr))(val);
+            }
+        };
         return true;
     }
 
