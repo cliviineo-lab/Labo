@@ -1,0 +1,31 @@
+name: SwarmOS C++20 Build & Test
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up GCC 11 / C++20 environment
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++-11
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=g++-11
+
+    - name: Build SwarmOS Kernel
+      run: |
+        cmake --build build --config Release
+
+    - name: Run SwarmOS Execution Pipeline
+      run: |
+        ./build/swarmos_node
