@@ -3,7 +3,7 @@
 
 #include <array>
 #include <atomic>
-#include "../Safety/SafetyCBF.hpp"
+#include "SwarmOS/Safety/SafetyCBF.hpp"
 
 namespace SwarmOS::Bridge {
 
@@ -47,21 +47,4 @@ public:
         typename SwarmOS::Safety::SafetyCBF<MaxObstacles>::Command cmd{};
         cmd.desired_velocity = raw_cmd.velocity;
 
-        auto safe_cmd = cbf.filter(state, cmd, obstacles, obstacle_count);
-
-        ROSCommand filtered_ros_cmd;
-        filtered_ros_cmd.velocity = safe_cmd.safe_velocity;
-        filtered_ros_cmd.timestamp_ns = raw_cmd.timestamp_ns;
-
-        return filtered_ros_cmd;
-    }
-
-private:
-    std::atomic<ROSCommand> input_cmd_{};
-    std::atomic<ROSState> current_state_{};
-    std::atomic<bool> has_new_cmd_{false};
-};
-
-} // namespace SwarmOS::Bridge
-
-#endif // SWARMOS_ROS2_BRIDGE_HPP
+        auto safe_cmd = cbf.filte
