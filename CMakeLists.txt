@@ -14,3 +14,6 @@ add_test(NAME test_kernel COMMAND test_kernel)
 
 add_executable(test_cbf SwarmOS/tests/test_cbf.cpp)
 add_test(NAME test_cbf COMMAND test_cbf)
+
+add_executable(test_bridge SwarmOS/tests/test_bridge.cpp)
+add_test(NAME test_bridge COMMAND test_bridge)
