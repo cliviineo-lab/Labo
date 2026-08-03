@@ -3,9 +3,9 @@
 #include <iostream>
 
 int main() {
-    using namespace SwarmOS;
+    using namespace SwarmOS::Kernel;
 
-    Kernel::SafetyCBF<4> cbf(0.5, 2.0);
+    SafetyCBF<4> cbf(0.5, 2.0);
 
     Vector3 drone_pos{0.0, 0.0, 0.0};
     cbf.add_obstacle(Vector3{2.0, 0.0, 0.0}, 0.5);
