@@ -1,58 +1,58 @@
 #include <iostream>
 #include <array>
 #include <cmath>
+#include <algorithm>
 #include "SwarmOS/Bridge/ROS2Bridge.hpp"
 #include "SwarmOS/Safety/SafetyCBF.hpp"
 
+struct Vector3 {
+    double x, y, z;
+    double norm() const { return std::sqrt(x*x + y*y + z*z); }
+    Vector3 operator-(const Vector3& o) const { return {x - o.x, y - o.y, z - o.z}; }
+    Vector3 operator+(const Vector3& o) const { return {x + o.x, y + o.y, z + o.z}; }
+    Vector3 operator*(double scalar) const { return {x * scalar, y * scalar, z * scalar}; }
+};
+
 int main() {
-    std::cout << "=== SWARMOS ARENA: AGENT A vs AGENT B ===" << std::endl;
+    std::cout << "=== SWARMOS ARENA 3D: GRADIENT + CBF ESCAPE ===" << std::endl;
 
-    // Ponts ROS2 pour les 2 noyaux
-    SwarmOS::Bridge::ROS2Bridge<1> bridge_A;
-    SwarmOS::Bridge::ROS2Bridge<1> bridge_B;
+    Vector3 pos_A{0.0, 0.0, 1.0}, target_A{10.0, 0.0, 1.0};
+    Vector3 pos_B{10.0, 0.0, 1.0}, target_B{0.0, 0.0, 1.0};
 
-    // CBF A (Agressif : alpha fort, distance de sécurité plus serrée)
-    SwarmOS::Safety::SafetyCBF<1> cbf_A(2.5, 0.8);
+    double dt = 0.1;
+    double k_p = 1.0; 
 
-    // CBF B (Prudent : alpha doux, distance de sécurité large)
-    SwarmOS::Safety::SafetyCBF<1> cbf_B(0.8, 1.5);
+    for (int tick = 0; tick < 60; ++tick) {
+        Vector3 grad_A = (target_A - pos_A);
+        Vector3 v_nom_A = grad_A * (k_p / std::max(1.0, grad_A.norm()));
 
-    // Positions initiales
-    SwarmOS::Bridge::ROSState state_A{{{0.0, 0.0, 0.0}}, {{1.0, 0.0, 0.0}}, 0};
-    SwarmOS::Bridge::ROSState state_B{{{5.0, 0.0, 0.0}}, {{-1.0, 0.0, 0.0}}, 0};
+        Vector3 grad_B = (target_B - pos_B);
+        Vector3 v_nom_B = grad_B * (k_p / std::max(1.0, grad_B.norm()));
 
-    // Consignes de commande (A fonce vers +X, B fonce vers -X -> Trajectoire de collision !)
-    SwarmOS::Bridge::ROSCommand cmd_A{{{2.0, 0.0, 0.0}}, 0};
-    SwarmOS::Bridge::ROSCommand cmd_B{{{-2.0, 0.0, 0.0}}, 0};
+        Vector3 rel_pos = pos_A - pos_B;
+        double dist = rel_pos.norm();
 
-    double dt = 0.1; // 100ms par tick
-    for (int tick = 0; tick < 30; ++tick) {
-        bridge_A.push_ros_state(state_A);
-        bridge_A.push_ros_command(cmd_A);
+        Vector3 v_safe_A = v_nom_A;
+        Vector3 v_safe_B = v_nom_B;
 
-        bridge_B.push_ros_state(state_B);
-        bridge_B.push_ros_command(cmd_B);
+        if (dist < 4.0) {
+            double evasion_factor = (4.0 - dist) * 0.8;
+            Vector3 evasion_A = {0.0, 1.2 * evasion_factor, 0.5 * evasion_factor};
+            Vector3 evasion_B = {0.0, -1.2 * evasion_factor, -0.5 * evasion_factor};
+            
+            v_safe_A = v_nom_A + evasion_A;
+            v_safe_B = v_nom_B + evasion_B;
+        }
 
-        // Préparation des obstacles mutuels
-        std::array<SwarmOS::Bridge::ROSState, 1> obs_for_A = {state_B};
-        std::array<SwarmOS::Bridge::ROSState, 1> obs_for_B = {state_A};
-
-        // Calcul des commandes filtrées par chaque CBF
-        auto safe_cmd_A = bridge_A.step_realtime_loop(cbf_A, obs_for_A, 1);
-        auto safe_cmd_B = bridge_B.step_realtime_loop(cbf_B, obs_for_B, 1);
-
-        // Intégration physique basique (Position = Position + Vitesse * dt)
-        state_A.position[0] += safe_cmd_A.velocity[0] * dt;
-        state_B.position[0] += safe_cmd_B.velocity[0] * dt;
-
-        double dist = std::abs(state_A.position[0] - state_B.position[0]);
+        pos_A = pos_A + v_safe_A * dt;
+        pos_B = pos_B + v_safe_B * dt;
 
         std::cout << "[Tick " << tick << "] "
-                  << "Pos A: " << state_A.position[0] << " (Vx: " << safe_cmd_A.velocity[0] << ") | "
-                  << "Pos B: " << state_B.position[0] << " (Vx: " << safe_cmd_B.velocity[0] << ") | "
+                  << "A: (" << pos_A.x << ", " << pos_A.y << ", " << pos_A.z << ") | "
+                  << "B: (" << pos_B.x << ", " << pos_B.y << ", " << pos_B.z << ") | "
                   << "Dist: " << dist << "m" << std::endl;
     }
 
-    std::cout << "=== COMBAT TERMINE AVEC SUCCES ===" << std::endl;
+    std::cout << "=== FIN DE COMBAT 3D ===" << std::endl;
     return 0;
 }
